@@ -2,10 +2,11 @@ import os
 import asyncio
 import json
 import logging
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.types import Message
+from aiogram.filters import Command
 from aiohttp import ClientSession
 
 # Load environment variables
@@ -13,7 +14,6 @@ TOKEN = os.getenv("BOT_TOKEN")
 BLOCKSCOUT_API = "https://soneium.blockscout.com/api"
 DATABASE_FILE = "database.json"
 
-# Cek apakah token bot tersedia
 if not TOKEN:
     raise ValueError("❌ BOT_TOKEN tidak ditemukan! Pastikan sudah diatur di Railway Variables.")
 
@@ -23,12 +23,12 @@ dp = Dispatcher()
 # Inisialisasi logging
 logging.basicConfig(level=logging.INFO)
 
-# Fungsi untuk menyimpan database transaksi yang sudah dikirim
+# Load database dari file JSON
 def load_db():
     if os.path.exists(DATABASE_FILE):
         with open(DATABASE_FILE, "r") as f:
             return json.load(f)
-    return {"tracked_addresses": {}, "sent_tx_hashes": set()}
+    return {"tracked_addresses": {}, "sent_tx_hashes": []}
 
 def save_db(db):
     with open(DATABASE_FILE, "w") as f:
@@ -36,8 +36,8 @@ def save_db(db):
 
 db = load_db()
 
-# Fungsi untuk menambahkan alamat ke daftar tracking
-@dp.message(commands=["add"])
+# Handler untuk menambahkan alamat tracking
+@dp.message(Command("add"))
 async def add_address(message: Message):
     args = message.text.split()
     if len(args) < 3:
@@ -45,13 +45,12 @@ async def add_address(message: Message):
         return
 
     address, name = args[1], " ".join(args[2:])
-    
     db["tracked_addresses"][address.lower()] = name
     save_db(db)
     await message.reply(f"✅ Alamat <b>{name}</b> berhasil ditambahkan untuk tracking!")
 
-# Fungsi untuk menghapus alamat dari daftar tracking
-@dp.message(commands=["remove"])
+# Handler untuk menghapus alamat dari tracking
+@dp.message(Command("remove"))
 async def remove_address(message: Message):
     args = message.text.split()
     if len(args) < 2:
@@ -66,8 +65,8 @@ async def remove_address(message: Message):
     else:
         await message.reply("❌ Alamat tidak ditemukan dalam daftar tracking.")
 
-# Fungsi untuk melihat daftar alamat yang dipantau
-@dp.message(commands=["list"])
+# Handler untuk melihat daftar alamat yang dipantau
+@dp.message(Command("list"))
 async def list_addresses(message: Message):
     if not db["tracked_addresses"]:
         await message.reply("ℹ️ Tidak ada alamat yang sedang dipantau.")
@@ -100,15 +99,9 @@ async def check_transactions():
 
                             # Identifikasi jenis transaksi
                             if sender == address:
-                                if tx.get("method") == "buyNFT":
-                                    tx_type = "🛒 Buy NFT"
-                                else:
-                                    tx_type = "📤 Sent"
+                                tx_type = "📤 Sent"
                             elif receiver == address:
-                                if tx.get("method") == "sellNFT":
-                                    tx_type = "💰 Sell NFT"
-                                else:
-                                    tx_type = "📥 Received"
+                                tx_type = "📥 Received"
                             else:
                                 tx_type = "🔄 Other"
 
@@ -119,7 +112,7 @@ async def check_transactions():
                             text += f"🔗 <a href='{tx_link}'>Lihat di Explorer</a>"
 
                             await bot.send_message(chat_id=os.getenv("CHAT_ID"), text=text)
-                            db["sent_tx_hashes"].add(tx_hash)
+                            db["sent_tx_hashes"].append(tx_hash)
                             save_db(db)
 
         except Exception as e:
