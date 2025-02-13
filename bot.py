@@ -22,7 +22,7 @@ async def start(message: types.Message):
 @dp.message_handler()
 async def track_address(message: types.Message):
     address = message.text.strip()
-    if len(address) == 42 and address.startswith("0x"):
+    if len(address) == 42 and address.startswith("0x"):  # Validasi alamat
         addresses.add(address)
         await message.reply(f"Alamat {address} telah ditambahkan untuk dilacak.")
     else:
